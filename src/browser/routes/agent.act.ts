@@ -189,7 +189,7 @@ export function registerBrowserAgentActRoutes(
         case "fill": {
           const rawFields = Array.isArray(body.fields) ? body.fields : [];
           const fields = rawFields
-            .map((field) => {
+            .map((field): BrowserFormField | null => {
               if (!field || typeof field !== "object") {
                 return null;
               }
@@ -205,9 +205,7 @@ export function registerBrowserAgentActRoutes(
                 typeof rec.value === "boolean"
                   ? rec.value
                   : undefined;
-              const parsed: BrowserFormField =
-                value === undefined ? { ref, type } : { ref, type, value };
-              return parsed;
+              return value === undefined ? null : ({ ref, type, value } satisfies BrowserFormField);
             })
             .filter((field): field is BrowserFormField => field !== null);
           if (!fields.length) {
