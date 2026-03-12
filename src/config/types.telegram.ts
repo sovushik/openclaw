@@ -116,6 +116,9 @@ export type TelegramAccountConfig = {
    * - "off" (default): ignore all reactions
    * - "own": notify when users react to bot messages
    * - "all": notify agent of all reactions
+   *
+   * Note: Telegram Bot API only delivers reaction updates for chats where the
+   * bot is an administrator, so this does not surface direct-message reactions.
    */
   reactionNotifications?: "off" | "own" | "all";
   /**

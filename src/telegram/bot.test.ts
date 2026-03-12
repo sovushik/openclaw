@@ -2731,6 +2731,9 @@ describe("createTelegramBot", () => {
     expect(reactionHandler).toBeDefined();
   });
 
+  // Unit-level routing test only: Telegram Bot API does not deliver
+  // message_reaction updates for direct messages, because the bot is not an
+  // administrator there.
   it("enqueues system event for reaction", async () => {
     onSpy.mockReset();
     enqueueSystemEvent.mockReset();

@@ -557,6 +557,9 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
     Notes:
 
     - `own` means user reactions to bot-sent messages only (best-effort via sent-message cache).
+    - Telegram Bot API delivers `message_reaction` updates only for chats where the bot is an administrator.
+      - In practice, this means reaction notifications are useful for groups/supergroups where the bot has admin rights.
+      - Direct-message reactions are not observable via Bot API, so `reactionNotifications` will not surface DM reactions to the agent.
     - Telegram does not provide thread IDs in reaction updates.
       - non-forum groups route to group chat session
       - forum groups route to the group general-topic session (`:topic:1`), not the exact originating topic
