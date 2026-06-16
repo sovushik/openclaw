@@ -14,6 +14,7 @@ import { mergeAlsoAllowPolicy, resolveToolProfilePolicy } from "../../../agents/
 import { resolveAgentModelPrimaryValue } from "../../../config/model-input.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { AgentToolsConfig, ToolsConfig } from "../../../config/types.tools.js";
+import { resolveHeartbeatIntervalMs } from "../../../infra/heartbeat-summary.js";
 import { collectChannelRouteTargets } from "../../../routing/channel-route-targets.js";
 import { createLazyImportLoader } from "../../../shared/lazy-promise.js";
 
@@ -140,8 +141,9 @@ function resolveProviderToolPolicy(params: {
   return (fullModelId ? lookup.get(fullModelId)?.value : undefined) ?? lookup.get(provider)?.value;
 }
 
-function resolveMessageToolAvailability(params: {
+function resolveToolAvailability(params: {
   cfg: OpenClawConfig;
+  toolName: string;
   agentId?: string;
   globalTools?: ToolsConfig;
   agentTools?: AgentToolsConfig;
@@ -177,7 +179,7 @@ function resolveMessageToolAvailability(params: {
     resolveToolProfilePolicy(agentProviderPolicy?.profile ?? providerPolicy?.profile),
     providerProfileAlsoAllow,
   );
-  return isToolAllowedByPolicies("message", [
+  return isToolAllowedByPolicies(params.toolName, [
     profilePolicy,
     providerProfilePolicy,
     pickSandboxToolPolicy(providerPolicy),
@@ -185,6 +187,18 @@ function resolveMessageToolAvailability(params: {
     pickSandboxToolPolicy(params.globalTools),
     pickSandboxToolPolicy(params.agentTools),
   ]);
+}
+
+function resolveMessageToolAvailability(
+  params: Omit<Parameters<typeof resolveToolAvailability>[0], "toolName">,
+): boolean {
+  return resolveToolAvailability({ ...params, toolName: "message" });
+}
+
+function resolveHeartbeatResponseToolAvailability(
+  params: Omit<Parameters<typeof resolveToolAvailability>[0], "toolName">,
+): boolean {
+  return resolveToolAvailability({ ...params, toolName: "heartbeat_respond" });
 }
 
 const SOURCE_REPLY_RUNTIME_MESSAGE_ALLOW = ["message"];
@@ -361,6 +375,80 @@ export function collectChannelBoundMessageToolPolicyWarnings(cfg: OpenClawConfig
       )}, but the message tool is unavailable for that agent; explicit channel actions such as sendAttachment, upload-file, thread-reply, or reply can fail. Add "message" to the agent tool allowlist, add "group:messaging", or switch the agent to a profile that includes messaging tools.`,
     ];
   });
+}
+
+function resolveHeartbeatConfig(
+  cfg: OpenClawConfig,
+  agentRecord?: Record<string, unknown>,
+): NonNullable<NonNullable<OpenClawConfig["agents"]>["defaults"]>["heartbeat"] | undefined {
+  const defaults = cfg.agents?.defaults?.heartbeat;
+  const overrides = hasRecord(agentRecord?.heartbeat) ? agentRecord.heartbeat : undefined;
+  if (!defaults && !overrides) {
+    return undefined;
+  }
+  return { ...defaults, ...overrides };
+}
+
+function listHeartbeatToolPolicyTargets(cfg: OpenClawConfig): Array<{
+  agentId?: string;
+  agentTools?: AgentToolsConfig;
+  label: string;
+}> {
+  const agents = listAgentRecords(cfg);
+  const explicitHeartbeatAgents = agents.filter((agent) => hasRecord(agent.heartbeat));
+  if (explicitHeartbeatAgents.length > 0) {
+    return explicitHeartbeatAgents.flatMap((agent) => {
+      const heartbeat = resolveHeartbeatConfig(cfg, agent);
+      if (!resolveHeartbeatIntervalMs(cfg, undefined, heartbeat)) {
+        return [];
+      }
+      const agentId = typeof agent.id === "string" ? agent.id : "unknown";
+      return [
+        {
+          agentId,
+          agentTools: agent.tools as AgentToolsConfig | undefined,
+          label: `agent "${agentId}"`,
+        },
+      ];
+    });
+  }
+  if (!cfg.agents?.defaults?.heartbeat) {
+    return [];
+  }
+  if (!resolveHeartbeatIntervalMs(cfg, undefined, cfg.agents.defaults.heartbeat)) {
+    return [];
+  }
+  if (agents.length === 0) {
+    return [{ label: "default tool policy" }];
+  }
+  return agents.map((agent) => {
+    const agentId = typeof agent.id === "string" ? agent.id : "unknown";
+    return {
+      agentId,
+      agentTools: agent.tools as AgentToolsConfig | undefined,
+      label: `agent "${agentId}"`,
+    };
+  });
+}
+
+export function collectHeartbeatResponseToolPolicyWarnings(cfg: OpenClawConfig): string[] {
+  const targets = listHeartbeatToolPolicyTargets(cfg).flatMap((target) => {
+    const available = resolveHeartbeatResponseToolAvailability({
+      cfg,
+      agentId: target.agentId,
+      globalTools: cfg.tools,
+      agentTools: target.agentTools,
+    });
+    return available ? [] : [target.label];
+  });
+  if (targets.length === 0) {
+    return [];
+  }
+  return [
+    `- Heartbeat is enabled, but heartbeat_respond is unavailable for ${formatTargets(
+      targets,
+    )}; heartbeat runs may be unable to report quiet outcomes cleanly. Add "heartbeat_respond" to the agent tool allowlist, add "group:automation", or switch the agent to a profile that includes automation tools.`,
+  ];
 }
 
 const PROFILE_CONFIGURED_TOOL_SECTIONS = [
@@ -792,6 +880,7 @@ export async function collectDoctorPreviewNotes(params: {
 
   warnings.push(...collectVisibleReplyToolPolicyWarnings(params.cfg));
   warnings.push(...collectChannelBoundMessageToolPolicyWarnings(params.cfg));
+  warnings.push(...collectHeartbeatResponseToolPolicyWarnings(params.cfg));
   warnings.push(...collectProfileConfiguredToolSectionWarnings(params.cfg));
   const { collectBlockedLegacyOpenAICodexProviderWarnings } =
     await import("./legacy-config-migrations.runtime.models.js");

@@ -11,21 +11,6 @@ const GATEWAY_LOG_ERROR_PATTERNS = [
   /tailscale .* requires/i,
 ];
 
-async function readLastLogLine(filePath: string): Promise<string | null> {
-  try {
-    const raw = await fs.readFile(filePath, "utf8");
-    const lines = raw.split(/\r?\n/).map((line) => line.trim());
-    for (let i = lines.length - 1; i >= 0; i -= 1) {
-      if (lines[i]) {
-        return lines[i];
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 export async function readLastGatewayErrorLine(
   env: NodeJS.ProcessEnv,
   options?: { platform?: NodeJS.Platform },
@@ -55,7 +40,5 @@ export async function readLastGatewayErrorLine(
       return line;
     }
   }
-  return readStderr
-    ? ((await readLastLogLine(stderrPath)) ?? (await readLastLogLine(stdoutPath)))
-    : await readLastLogLine(stdoutPath);
+  return null;
 }

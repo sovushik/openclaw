@@ -8,6 +8,7 @@ import {
   collectDoctorPreviewNotes,
   collectChannelBoundMessageToolPolicyWarnings,
   collectDoctorPreviewWarnings,
+  collectHeartbeatResponseToolPolicyWarnings,
   collectProfileConfiguredToolSectionWarnings,
   collectVisibleReplyToolPolicyWarnings,
 } from "./preview-warnings.js";
@@ -1194,6 +1195,78 @@ describe("doctor preview warnings", () => {
     ).toStrictEqual([]);
     expect(
       collectVisibleReplyToolPolicyWarnings({
+        tools: {
+          allow: ["read"],
+        },
+      }),
+    ).toStrictEqual([]);
+  });
+
+  it("warns when heartbeat is enabled without heartbeat_respond access", () => {
+    const warnings = collectHeartbeatResponseToolPolicyWarnings({
+      agents: {
+        defaults: {
+          heartbeat: {
+            every: "30m",
+          },
+        },
+        list: [
+          {
+            id: "main",
+            tools: {
+              profile: "coding",
+            },
+          },
+          {
+            id: "ops",
+            tools: {
+              allow: ["read"],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(warnings).toEqual([
+      '- Heartbeat is enabled, but heartbeat_respond is unavailable for agent "main" and agent "ops"; heartbeat runs may be unable to report quiet outcomes cleanly. Add "heartbeat_respond" to the agent tool allowlist, add "group:automation", or switch the agent to a profile that includes automation tools.',
+    ]);
+  });
+
+  it("skips heartbeat response tool warnings when automation tools are available or heartbeat is disabled", () => {
+    expect(
+      collectHeartbeatResponseToolPolicyWarnings({
+        agents: {
+          defaults: {
+            heartbeat: {
+              every: "30m",
+            },
+          },
+          list: [
+            {
+              id: "main",
+              tools: {
+                profile: "full",
+              },
+            },
+            {
+              id: "ops",
+              tools: {
+                allow: ["group:automation"],
+              },
+            },
+          ],
+        },
+      }),
+    ).toStrictEqual([]);
+    expect(
+      collectHeartbeatResponseToolPolicyWarnings({
+        agents: {
+          defaults: {
+            heartbeat: {
+              every: "0m",
+            },
+          },
+        },
         tools: {
           allow: ["read"],
         },
