@@ -28,10 +28,13 @@ jobs:
     uses: ./.github/workflows/openclaw-live-and-e2e-checks-reusable.yml
     with:
       ref: ${{ github.sha }}
-      include_repo_e2e: true
-      include_release_path_suites: true
+      # This fork does not provision the upstream provider secrets. Keep the
+      # daily workflow useful and green by running only credential-free smoke
+      # coverage; live-provider and release-path suites remain manual-only.
+      include_repo_e2e: false
+      include_release_path_suites: false
       include_openwebui: true
-      include_live_suites: true
+      include_live_suites: false
       allow_unreleased_changelog: true
       enable_prepublish_plugin_registry: true
       shared_image_artifact_namespace: scheduled-live
