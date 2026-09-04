@@ -26,6 +26,8 @@ permissions: {}
 
 jobs:
   sweep:
+    env:
+      HAS_GITHUB_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY != '' || secrets.GH_APP_PRIVATE_KEY_FALLBACK != '' }}
     permissions:
       contents: read
     runs-on: ubuntu-24.04
