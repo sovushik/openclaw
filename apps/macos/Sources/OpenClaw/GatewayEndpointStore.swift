@@ -186,6 +186,19 @@ actor GatewayEndpointStore {
         return nil
     }
 
+    private static func resolveLoopbackRemoteToken(root: [String: Any], localPort: Int) -> String? {
+        guard let gateway = root["gateway"] as? [String: Any],
+              let remote = gateway["remote"] as? [String: Any],
+              let rawURL = remote["url"] as? String,
+              let url = URL(string: rawURL),
+              let host = url.host,
+              LoopbackHost.isLoopbackHost(host)
+        else { return nil }
+        let remotePort = url.port ?? (url.scheme?.lowercased() == "wss" ? 443 : 80)
+        guard remotePort == localPort else { return nil }
+        return GatewayRemoteConfig.resolveTokenString(root: root)
+    }
+
     private static func resolveConfigToken(isRemote: Bool, root: [String: Any]) -> String? {
         if isRemote {
             return GatewayRemoteConfig.resolveTokenString(root: root)
@@ -632,11 +645,14 @@ extension GatewayEndpointStore {
             bindMode: bind,
             customBindHost: customBindHost,
             tailscaleIP: tailscaleIP)
-        let token = self.resolveGatewayToken(
+        let configuredToken = self.resolveGatewayToken(
             isRemote: false,
             root: root,
             env: env,
             launchdSnapshot: launchdSnapshot)
+        let token = configuredToken ?? self.resolveLoopbackRemoteToken(
+            root: root,
+            localPort: port)
         let password = self.resolveGatewayPassword(
             isRemote: false,
             root: root,
